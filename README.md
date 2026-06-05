@@ -1,4 +1,4 @@
-# Fedora 44 - Kompleksowy Skrypt Konfiguracyjny (Post-Install)
+# Fedora - Kompleksowy Skrypt Konfiguracyjny (Post-Install)
 
 Automatyczny skrypt Bash przeznaczony do szybkiej konfiguracji, optymalizacji i instalacji oprogramowania na świeżym systemie **Fedora 44**. Skrypt automatyzuje powtarzalne czynności, przyspiesza menedżer pakietów DNF5, dodaje kluczowe repozytoria oraz przygotowuje system pod kątem deweloperskim, gamingowym i codziennego użytku.
 
@@ -58,13 +58,17 @@ Skrypt `install.sh` do pełnego działania (w tym opcjonalnych kroków kopiowani
 
 ## 💻 Instrukcja Uruchomienia
 
-Otwórz terminal w katalogu zawierającym skrypt i wykonaj poniższe polecenia:
+Wykonaj poniższe polecenia w terminalu:
 
 ```bash
-# 1. Nadaj uprawnienia do wykonywania skryptu
+# 1. Sklonuj swoje repozytorium
+git clone https://github.com/bartko4321/fedora-config.git
+cd fedora-config
+
+# 2. Nadaj uprawnienia do wykonywania skryptu install.sh
 chmod +x install.sh
 
-# 2. Uruchom skrypt jako zwykły użytkownik
+# 3. Uruchom skrypt jako zwykły użytkownik
 ./install.sh
 ```
 

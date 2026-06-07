@@ -76,6 +76,8 @@ Wsparcie numer konta: 06291000060000000005038936
 
 > 🚨 **UWAGA:** Po pomyślnym zakończeniu wszystkich operacji, skrypt odczeka 3 sekundy i **automatycznie zrestartuje komputer**, aby poprawnie załadować nowe moduły jądra, sterowniki wczesnego KMS oraz aktywować powłokę ZSH. Upewnij się, że zapisałeś wszystkie otwarte dokumenty przed uruchomieniem instalatora!
 
+ Jeśli projekt Ci się podoba, zostaw gwiazdkę! ⭐
+
 ---
 
 ## 📄 Licencja

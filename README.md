@@ -1,6 +1,6 @@
 # Fedora - Kompleksowy Skrypt Konfiguracyjny (Post-Install)
 
-Automatyczny skrypt Bash przeznaczony do szybkiej konfiguracji, optymalizacji i instalacji oprogramowania na świeżym systemie **Fedora 44**. Skrypt automatyzuje powtarzalne czynności, przyspiesza menedżer pakietów DNF5, dodaje kluczowe repozytoria oraz przygotowuje system pod kątem deweloperskim, gamingowym i codziennego użytku.
+Automatyczny skrypt Bash przeznaczony do szybkiej konfiguracji, optymalizacji i instalacji oprogramowania na świeżym systemie **Fedora**. Skrypt automatyzuje powtarzalne czynności, przyspiesza menedżer pakietów DNF5, dodaje kluczowe repozytoria oraz przygotowuje system pod kątem deweloperskim, gamingowym i codziennego użytku.
 
 ---
 

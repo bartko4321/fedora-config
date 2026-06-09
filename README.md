@@ -60,17 +60,23 @@ The `install.sh` script expects the following file structure in its working dire
 
 Execute the following commands in your terminal:
 
-```bash
 # 1. Clone your repository
+```bash
 git clone https://github.com/bartko4321/fedora-config.git
+```
 
 # 2. Enter the downloaded folder
+```bash
 cd fedora-config
+```
 
 # 3. Make the install.sh script executable
+```bash
 chmod +x install.sh
+```
 
 # 4. Run the script as a regular user
+```bash
 ./install.sh
 ```
 

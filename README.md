@@ -63,12 +63,14 @@ Execute the following commands in your terminal:
 ```bash
 # 1. Clone your repository
 git clone https://github.com/bartko4321/fedora-config.git
+
+# 2. Enter the downloaded folder
 cd fedora-config
 
-# 2. Make the install.sh script executable
+# 3. Make the install.sh script executable
 chmod +x install.sh
 
-# 3. Run the script as a regular user
+# 4. Run the script as a regular user
 ./install.sh
 ```
 

@@ -162,6 +162,7 @@ PACKAGES=(
     dconf-editor hunspell-pl fastfetch unrar git mc exfatprogs ntfs-3g
     os-prober android-tools fsarchiver inxi pv rsync python3-defusedxml
     python3-packaging python3-pip pipx 7zip zenity innoextract makeself
+    dnf-plugins-core
 
     # Multimedia
     audacity gimp gmic mixxx kdenlive
@@ -386,6 +387,7 @@ for grp in libvirt kvm; do
             && log_ok "Dodano $CURRENT_USER do grupy $grp"
     fi
 done
+sudo usermod -aG libvirt $USER && log_ok "Dodano $USER do grupy libvirt"
 
 
 # ==========================================================

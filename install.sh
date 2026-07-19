@@ -126,7 +126,30 @@ sudo dnf5 install -y google-chrome-stable
 # --- Brave (Origin) - wg https://brave.com/origin/linux/ ---
 log_info "Konfiguracja repozytorium i instalacja Brave Origin..."
 wait_for_rpm_lock
-sudo dnf5 install -y dnf-plugins-core
+sudo dnf5 install -y dnf-plugins-core gnupg2
+
+# UWAGA: podobnie jak w wersji apt/deb, klucz podpisujący hostowany przez
+# Brave na S3 (brave-core.asc, do którego odwołuje się plik .repo poniżej)
+# bywa nieaktualny względem tego, czym faktycznie podpisują metadane repo —
+# znany, powtarzający się problem po stronie Brave (np.
+# https://github.com/brave/brave-browser/issues/34373 i #42949), objawiający
+# się błędem "Signing key not found" / "repository does not have any OpenPGP
+# keys configured". Dlatego importujemy klucz RĘCZNIE przed dodaniem repo:
+# najpierw próbujemy oficjalnego brave-core.asc, a jeśli import się nie uda,
+# pobieramy ten sam klucz po jego ID bezpośrednio z niezależnego keyservera.
+BRAVE_KEY_ID="0686B78420038257"
+if ! sudo rpm --import https://brave-browser-rpm-release.s3.brave.com/brave-core.asc 2>/dev/null; then
+    log_warn "Import klucza Brave z brave-core.asc nie powiódł się, próbuję keyservera..."
+    BRAVE_GNUPGHOME="$(mktemp -d)"
+    if ! gpg --homedir "$BRAVE_GNUPGHOME" --keyserver hkps://keyserver.ubuntu.com --recv-keys "$BRAVE_KEY_ID"; then
+        log_warn "keyserver.ubuntu.com nie odpowiedział, próbuję keys.openpgp.org..."
+        gpg --homedir "$BRAVE_GNUPGHOME" --keyserver hkps://keys.openpgp.org --recv-keys "$BRAVE_KEY_ID"
+    fi
+    gpg --homedir "$BRAVE_GNUPGHOME" --armor --export "$BRAVE_KEY_ID" > "$BRAVE_GNUPGHOME/brave-core.asc"
+    sudo rpm --import "$BRAVE_GNUPGHOME/brave-core.asc"
+    rm -rf "$BRAVE_GNUPGHOME"
+fi
+
 sudo dnf5 config-manager addrepo --from-repofile=https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo
 
 wait_for_rpm_lock

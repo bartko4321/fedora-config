@@ -111,6 +111,25 @@ sudo dnf5 install -y \
 
 # --- Chrome ---
 log_info "Konfiguracja repozytorium i instalacja Google Chrome..."
+
+# UWAGA: samo dodanie repo z gpgcheck=1 i poleganie na tym, że dnf5 sam
+# zaimportuje klucz przy instalacji, potrafi się wysypać, jeśli w bazie RPM
+# jest już zaimportowany STARY klucz Google (np. z poprzedniego uruchomienia
+# skryptu) - RPM/dnf5 widzi ten sam Key ID i nie podmienia go automatycznie,
+# mimo że Google okresowo rotuje podklucze podpisujące. Efekt: błąd
+# weryfikacji podpisu przy `dnf5 install google-chrome-stable`. Dlatego
+# najpierw ręcznie usuwamy stary klucz Google z bazy RPM i importujemy
+# świeży, zanim dnf5 w ogóle zacznie cokolwiek instalować.
+log_info "Ręczny import klucza Google..."
+OLD_GOOGLE_KEYS=$(rpm -qa 'gpg-pubkey*' --qf '%{NAME}-%{VERSION}-%{RELEASE} %{PACKAGER}\n' 2>/dev/null \
+    | grep -i 'linux-packages-keymaster@google.com\|Google, Inc' \
+    | cut -d' ' -f1 || true)
+if [[ -n "$OLD_GOOGLE_KEYS" ]]; then
+    log_info "Usuwam stary klucz Google przed ponownym importem: $OLD_GOOGLE_KEYS"
+    sudo rpm -e $OLD_GOOGLE_KEYS 2>/dev/null || true
+fi
+sudo rpm --import https://dl.google.com/linux/linux_signing_key.pub || log_warn "Błąd pobierania klucza Google, pomijam."
+
 sudo tee /etc/yum.repos.d/google-chrome.repo > /dev/null <<'EOF'
 [google-chrome]
 name=Google Chrome

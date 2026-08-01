@@ -185,12 +185,30 @@ TO_REMOVE=(
     nano konqueror plasma-browser-integration plasma-vault
     krdp plasma-thunderbolt kontact kmail kontrast plasma-welcome
     kaddressbook kdepim-runtime akonadi
-    krfb krdc
+    krfb krdc epiphany
 )
 wait_for_rpm_lock
 sudo dnf5 remove -y "${TO_REMOVE[@]}" 2>/dev/null \
     || log_warn "Część pakietów do usunięcia nie była zainstalowana"
 sudo dnf5 autoremove -y
+
+# --- Czyszczenie danych po Akonadi/KMail/Kontact (pozostałości po usuniętych pakietach) ---
+log_info "Usuwanie pozostałych danych Akonadi/KMail/Kontact..."
+rm -rf ~/.local/share/akonadi
+rm -rf ~/.local/share/kmail2
+rm -rf ~/.local/share/local-mail
+rm -rf ~/.local/share/contacts
+rm -rf ~/.local/share/korganizer
+rm -rf ~/.local/share/akregator
+rm -rf ~/.local/share/kontact
+rm -rf ~/.config/akonadi*
+rm -rf ~/.config/kmail*
+rm -rf ~/.config/kontact*
+rm -rf ~/.config/korganizer*
+rm -rf ~/.config/kaddressbook*
+rm -rf ~/.config/akregator*
+rm -rf ~/.config/emailidentities
+rm -rf ~/.config/mailtransports
 
 # --- Główna lista pakietów ---
 PACKAGES=(

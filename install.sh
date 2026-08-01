@@ -216,7 +216,7 @@ PACKAGES=(
     dconf-editor hunspell-pl fastfetch unrar git mc exfatprogs ntfs-3g
     os-prober android-tools fsarchiver inxi pv rsync python3-defusedxml
     python3-packaging python3-pip pipx 7zip zenity innoextract makeself
-    dnf-plugins-core bleachbit timeshift flatseal cdemu-daemon cdemu-client gcdemu
+    dnf-plugins-core bleachbit timeshift flatseal cdemu-daemon cdemu-client
 
     # Multimedia
     audacity gimp gmic mixxx kdenlive

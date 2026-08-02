@@ -185,8 +185,7 @@ TO_REMOVE=(
     nano konqueror plasma-browser-integration plasma-vault krdp krfb 
     plasma-thunderbolt kontact kmail kontrast plasma-welcome imagemagick 
     kaddressbook kdepim-runtime akonadi-server akregator korganizer 
-    gnome-software epiphany decibels rhythmbox 
-    showtime cosmic-store cosmic-player parole
+    epiphany decibels rhythmbox showtime cosmic-player parole
 )
 wait_for_rpm_lock
 sudo dnf5 remove -y "${TO_REMOVE[@]}" 2>/dev/null \
@@ -220,7 +219,7 @@ PACKAGES=(
     dnf-plugins-core bleachbit timeshift flatseal cdemu-daemon cdemu-client
 
     # Multimedia
-    audacity gimp gmic mixxx kdenlive
+    audacity gimp gmic mixxx kdenlive soundconverter handbrake
 
     # Internet / komunikatory
     telegram-desktop qbittorrent thunderbird thunderbird-i18n-pl

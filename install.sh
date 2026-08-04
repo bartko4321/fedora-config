@@ -219,7 +219,7 @@ PACKAGES=(
     dnf-plugins-core bleachbit timeshift flatseal cdemu-daemon cdemu-client
 
     # Multimedia
-    audacity gimp gmic mixxx kdenlive soundconverter handbrake
+    audacity gimp gmic mixxx kdenlive soundconverter handbrake-gui
 
     # Internet / komunikatory
     telegram-desktop qbittorrent thunderbird thunderbird-i18n-pl

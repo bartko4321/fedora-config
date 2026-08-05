@@ -34,20 +34,6 @@ An automated Bash script designed for quick configuration, optimization, and sof
 
 ---
 
-## 📁 Required Project Structure
-
-The `install.sh` script expects the following file structure in its working directory for full functionality (including optional config-copying steps):
-
-```text
-📁 fedora-postinstall/
-├── 📄 install.sh                    # Main script (this file)
-├── 📄 .update.sh                    # (Optional) Environment update script
-├── 📄 Konserwacja systemu.desktop   # (Optional) App shortcut added to the system menu
-└── 📁 bleachbit/                    # (Optional) Pre-configured BleachBit cleanup files for root
-```
-
----
-
 ## 🛠 Prerequisites
 
 1. A freshly installed **Fedora** system with internet access.

@@ -185,7 +185,7 @@ TO_REMOVE=(
     nano konqueror plasma-browser-integration plasma-vault krdp krfb 
     plasma-thunderbolt kontact kmail kontrast plasma-welcome imagemagick 
     kaddressbook kdepim-runtime akonadi-server akregator korganizer 
-    epiphany decibels rhythmbox showtime cosmic-player parole kwalletmanager5
+    epiphany decibels rhythmbox showtime cosmic-player parole kwalletmanager
 )
 wait_for_rpm_lock
 sudo dnf5 remove -y "${TO_REMOVE[@]}" 2>/dev/null \

@@ -224,12 +224,6 @@ else
     printf '[Wallet]\nEnabled=false\n' > ~/.config/kwalletrc
 fi
 
-log_info "Całkowite wyłączanie demona KWallet (odbieranie uprawnień i maskowanie D-Bus)..."
-sudo chmod -x /usr/bin/kwalletd6 /usr/bin/kwalletd 2>/dev/null || true
-mkdir -p ~/.local/share/dbus-1/services/
-ln -sf /dev/null ~/.local/share/dbus-1/services/org.kde.kwalletd6.service
-ln -sf /dev/null ~/.local/share/dbus-1/services/org.kde.kwalletd.service
-
 # --- Główna lista pakietów ---
 PACKAGES=(
     # Narzędzia systemowe

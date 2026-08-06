@@ -185,7 +185,7 @@ TO_REMOVE=(
     nano konqueror plasma-browser-integration plasma-vault krdp krfb 
     plasma-thunderbolt kontact kmail kontrast plasma-welcome imagemagick 
     kaddressbook kdepim-runtime akonadi-server akregator korganizer 
-    epiphany decibels rhythmbox showtime cosmic-player parole
+    epiphany decibels rhythmbox showtime cosmic-player parole kwalletmanager5
 )
 wait_for_rpm_lock
 sudo dnf5 remove -y "${TO_REMOVE[@]}" 2>/dev/null \
@@ -209,6 +209,24 @@ rm -rf ~/.config/kaddressbook*
 rm -rf ~/.config/akregator*
 rm -rf ~/.config/emailidentities
 rm -rf ~/.config/mailtransports
+
+# --- Wyłączenie KDE Wallet (Portfela) ---
+log_info "Wyłączanie usługi KDE Wallet..."
+mkdir -p ~/.config
+if [[ -f ~/.config/kwalletrc ]]; then
+    if grep -q "^\[Wallet\]" ~/.config/kwalletrc; then
+        sed -i '/^\[Wallet\]/,/^\[/{s/^Enabled=.*/Enabled=false/}' ~/.config/kwalletrc
+        grep -q "^Enabled=" ~/.config/kwalletrc || sed -i '/^\[Wallet\]/a Enabled=false' ~/.config/kwalletrc
+    else
+        printf '[Wallet]\nEnabled=false\n' >> ~/.config/kwalletrc
+    fi
+else
+    printf '[Wallet]\nEnabled=false\n' > ~/.config/kwalletrc
+fi
+systemctl --user mask kwalletd5.service kwalletd6.service 2>/dev/null || true
+systemctl --user stop kwalletd5.service kwalletd6.service 2>/dev/null || true
+killall -q kwalletd5 kwalletd6 2>/dev/null || true
+log_ok "KDE Wallet wyłączony."
 
 # --- Główna lista pakietów ---
 PACKAGES=(

@@ -446,6 +446,9 @@ if ! flatpak remote-list | grep -q "^flathub"; then
     sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 fi
 
+log_info "Odświeżanie metadanych Flathub..."
+sudo flatpak update --appstream || true
+
 log_info "Instalacja Flatseal z Flathub..."
 sudo flatpak install -y flathub com.github.tchx84.Flatseal || log_warn "Błąd instalacji Flatseal"
 

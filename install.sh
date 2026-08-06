@@ -222,7 +222,7 @@ PACKAGES=(
     audacity gimp gmic mixxx kdenlive soundconverter handbrake-gui vlc elisa krita
 
     # Internet / komunikatory
-    telegram-desktop qbittorrent thunderbird thunderbird-i18n-pl
+    telegram-desktop qbittorrent thunderbird
 
     # Wine
     wine winetricks

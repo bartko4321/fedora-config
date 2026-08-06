@@ -216,7 +216,7 @@ PACKAGES=(
     dconf-editor hunspell-pl fastfetch unrar git mc exfatprogs ntfs-3g vim
     os-prober android-tools fsarchiver inxi pv rsync python3-defusedxml
     python3-packaging python3-pip pipx 7zip zenity innoextract makeself
-    dnf-plugins-core bleachbit timeshift flatseal cdemu-daemon cdemu-client
+    dnf-plugins-core bleachbit timeshift cdemu-daemon cdemu-client
 
     # Multimedia
     audacity gimp gmic mixxx kdenlive soundconverter handbrake-gui vlc elisa krita
@@ -445,6 +445,9 @@ sudo dnf5 install -y flatpak || log_warn "Błąd instalacji Flatpak"
 if ! flatpak remote-list | grep -q "^flathub"; then
     sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 fi
+
+log_info "Instalacja Flatseal z Flathub..."
+sudo flatpak install -y flathub com.github.tchx84.Flatseal || log_warn "Błąd instalacji Flatseal"
 
 log_info "Instalacja Gear Lever z Flathub..."
 sudo flatpak install -y flathub it.mijorus.gearlever || log_warn "Błąd instalacji Gear Lever"

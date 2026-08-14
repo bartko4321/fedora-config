@@ -6,79 +6,130 @@
 
 set -euo pipefail
 
-# --- Kolory i logowanie ---
+# ── Wykrywanie języka systemu ──────────────────────────────────
+# Jeśli system jest ustawiony na polski (pl_PL/pl_*) -> komunikaty PL,
+# w każdym innym przypadku -> komunikaty EN.
+detect_system_lang() {
+    local sys_lang="${LANG:-}"
+    [[ -z "$sys_lang" ]] && sys_lang="${LC_ALL:-${LC_MESSAGES:-}}"
+    if [[ "$sys_lang" == pl_PL* || "$sys_lang" == pl* ]]; then
+        echo "pl"
+    else
+        echo "en"
+    fi
+}
+SCRIPT_LANG="$(detect_system_lang)"
+
+# ── Kolory ────────────────────────────────────────────────────
 INFO='\033[0;34m'
 SUCCESS='\033[0;32m'
-ERROR='\033[0;31m'
 WARN='\033[0;33m'
+ERR='\033[0;31m'
 NC='\033[0m'
 
-log_info()  { echo -e "${INFO}==> $*${NC}"; }
-log_ok()    { echo -e "${SUCCESS}✔ $*${NC}"; }
-log_err()   { echo -e "${ERROR}✖ BŁĄD: $*${NC}" >&2; }
-log_warn()  { echo -e "${WARN}⚠ UWAGA: $*${NC}"; }
+# ── System logowania ───────────────────────────────────────────
+# Zasada: na ekranie widoczne są TYLKO ważne komunikaty ogólne (log_info / log_ok / log_error).
+# Wszystko inne (log_warn, wyjście poleceń, dnf, rpm itp.) trafia WYŁĄCZNIE do pliku logu.
+# Plik logu jest tworzony na stałe tylko wtedy, gdy wystąpi błąd.
+TMP_LOG="$(mktemp /tmp/fedora-install-log.XXXXXX)"
+LOG_FILE="$HOME/install_error_$(date +%Y%m%d_%H%M%S).log"
 
-# Pułapka błędów
-trap 'log_err "Skrypt zakończył się błędem w linii $LINENO. Polecenie: $BASH_COMMAND"' ERR
+# fd 3 = prawdziwy terminal (do wyświetlania ważnych komunikatów),
+# fd 1/2 od teraz lądują wyłącznie w pliku tymczasowym (ukryte).
+exec 3>&1
+exec >>"$TMP_LOG" 2>&1
 
-# Sprawdzenie uprawnień
+cleanup_on_exit() {
+    local exit_code=$?
+    if [ "$exit_code" -ne 0 ]; then
+        cp -f "$TMP_LOG" "$LOG_FILE" 2>/dev/null || true
+        if [[ "$SCRIPT_LANG" == "pl" ]]; then
+            echo -e "${ERR}✘ Wystąpił błąd (kod: $exit_code). Szczegółowy log zapisano w: $LOG_FILE${NC}" >&3
+        else
+            echo -e "${ERR}✘ An error occurred (code: $exit_code). Detailed log saved to: $LOG_FILE${NC}" >&3
+        fi
+    fi
+    rm -f "$TMP_LOG"
+}
+trap cleanup_on_exit EXIT
+
+# ── Pomocnicze funkcje logowania ──────────────────────────────
+# Każda funkcja przyjmuje: "$1" = tekst PL, "$2" = tekst EN
+_pick_msg() { [[ "$SCRIPT_LANG" == "pl" ]] && echo "$1" || echo "$2"; }
+
+log_info()  { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${INFO}==> $m${NC}" >&3; echo -e "${INFO}==> $m${NC}"; }
+log_ok()    { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${SUCCESS}✔ $m${NC}" >&3; echo -e "${SUCCESS}✔ $m${NC}"; }
+log_error() { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${ERR}✘ $m${NC}" >&3; echo -e "${ERR}✘ $m${NC}"; }
+# log_warn: celowo NIE trafia na ekran (fd 3) - tylko do logu w tle
+log_warn()  { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${WARN}⚠ $m${NC}"; }
+
+# Sprawdzenie uprawnień (skrypt NIE może być uruchamiany bezpośrednio jako root)
 if [[ "$EUID" -eq 0 ]]; then
-    log_err "Nie uruchamiaj skryptu jako root. Uruchom jako zwykły użytkownik z uprawnieniami sudo."
+    log_error "Nie uruchamiaj skryptu jako root. Uruchom jako zwykły użytkownik z uprawnieniami sudo." \
+              "Do not run this script as root. Run as a regular user with sudo privileges."
     exit 1
 fi
 
-# --- Zmienne globalne ---
+# ── Zmienne globalne ───────────────────────────────────────────
 CURRENT_USER=$(whoami)
 ACTUAL_USER="${SUDO_USER:-$USER}"
-OLD_USER_PLACEHOLDER="bartek"
 RPM_DIR="/tmp/rpms_$$"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-
-# Tymczasowy wyjątek sudo dla DNF/RPM (by nie pytało o hasło podczas długiej instalacji)
-sudo -v
-echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-temp-installer > /dev/null
 
 
 # ==========================================================
 # 1. PRZYGOTOWANIE ŚRODOWISKA UŻYTKOWNIKA
 # ==========================================================
-log_info "Przygotowanie środowiska użytkownika..."
+log_info "Przygotowanie środowiska użytkownika..." \
+         "Preparing user environment..."
 
 if [ -f "$SCRIPT_DIR/.update.sh" ]; then
     cp -af "$SCRIPT_DIR/.update.sh" ~/.update.sh
     chmod +x ~/.update.sh
 fi
 
-# ── Kopiowanie .local i .config do katalogu domowego ──────────
+# Kopiowanie .local i .config do katalogu domowego
 if [ -d "$SCRIPT_DIR/.local" ]; then
     mkdir -p ~/.local
     cp -afT "$SCRIPT_DIR/.local" ~/.local
-    log_ok "Skopiowano katalog '.local' do \$HOME"
+    log_ok "Skopiowano katalog '.local' do \$HOME" \
+           "Copied '.local' directory to \$HOME"
 else
-    log_warn "Brak katalogu '.local' w katalogu skryptu – pominięto"
+    log_warn "Brak katalogu '.local' w katalogu skryptu – pominięto" \
+             "No '.local' directory in script folder – skipped"
 fi
 
 if [ -d "$SCRIPT_DIR/.config" ]; then
     mkdir -p ~/.config
     cp -afT "$SCRIPT_DIR/.config" ~/.config
-    log_ok "Skopiowano katalog '.config' do \$HOME"
+    log_ok "Skopiowano katalog '.config' do \$HOME" \
+           "Copied '.config' directory to \$HOME"
 else
-    log_warn "Brak katalogu '.config' w katalogu skryptu – pominięto"
+    log_warn "Brak katalogu '.config' w katalogu skryptu – pominięto" \
+             "No '.config' directory in script folder – skipped"
 fi
+
 
 # ==========================================================
 # 2. KONFIGURACJA SYSTEMOWA (SUDO)
 # ==========================================================
-log_info "Przechodzę do konfiguracji systemowej..."
+log_info "Rozpoczynanie konfiguracji systemowej..." \
+         "Starting system configuration..."
 
-# Agresywne zatrzymanie usług w tle, w tym nowoczesnego dnf5-makecache
-log_info "Zatrzymywanie usług w tle (PackageKit, dnf5-makecache)..."
+# Tymczasowy wyjątek sudo dla DNF/RPM (by nie pytało o hasło podczas długiej instalacji)
+sudo -v
+echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-temp-installer > /dev/null
+
+# Agresywne zatrzymanie usług w tle, w tym dnf5-makecache
+log_info "Zatrzymywanie usług w tle (PackageKit, DNF5)..." \
+         "Stopping background services (PackageKit, DNF5)..."
 sudo systemctl stop packagekit.service dnf-makecache.timer dnf-makecache.service dnf5-makecache.timer dnf5-makecache.service 2>/dev/null || true
 sudo systemctl mask packagekit.service dnf-makecache.timer dnf-makecache.service dnf5-makecache.timer dnf5-makecache.service 2>/dev/null || true
 sudo killall -9 packagekitd dnf dnf5 rpm 2>/dev/null || true
 
-# Optymalizacja DNF5 pod kątem sieci (Fedora 44 używa dnf5 jako domyślnego)
-log_info "Optymalizacja menedżera pakietów DNF5..."
+# Optymalizacja DNF5 pod kątem sieci
+log_info "Optymalizacja menedżera pakietów DNF5..." \
+         "Optimizing DNF5 package manager..."
 for DNF_CONF in /etc/dnf/dnf.conf /etc/dnf/dnf5.conf; do
     if [[ -f "$DNF_CONF" ]]; then
         sudo sed -i '/^fastestmirror=/d; /^retries=/d; /^timeout=/d; /^max_parallel_downloads=/d; /^ip_resolve=/d' "$DNF_CONF"
@@ -86,56 +137,48 @@ for DNF_CONF in /etc/dnf/dnf.conf /etc/dnf/dnf5.conf; do
     fi
 done
 
-# Poczekaj na zwolnienie blokady RPM/DNF5
 wait_for_rpm_lock() {
     local i=0
     while pgrep -x dnf >/dev/null || pgrep -x dnf5 >/dev/null || pgrep -x packagekitd >/dev/null || pgrep -x rpm >/dev/null; do
         if (( i++ >= 24 )); then
-            log_warn "Blokada RPM nadal zajęta po 120s — wymuszam czyszczenie..."
+            log_warn "Blokada RPM nadal zajęta po 120s — wymuszam czyszczenie..." \
+                     "RPM lock still busy after 120s — forcing cleanup..."
             sudo systemctl stop packagekit.service dnf-makecache.service dnf5-makecache.service 2>/dev/null || true
             sudo killall -9 dnf dnf5 rpm packagekitd 2>/dev/null || true
             sudo rm -f /var/lib/rpm/.rpm.lock /usr/lib/sysimage/rpm/.rpm.lock /var/cache/libdnf5/*.lock 2>/dev/null || true
             break
         fi
-        log_info "Czekam na zwolnienie procesów w tle (DNF/RPM)... ($((i*5))s)"
         sleep 5
     done
 }
 
-# Instalacja podstawowych narzędzi skryptowych (KRYTYCZNE)
+# Instalacja podstawowych narzędzi skryptowych
 wait_for_rpm_lock
 sudo dnf5 install -y wget curl pciutils
 
 # --- Repozytoria RPM Fusion ---
 FEDORA_VER=$(rpm -E %fedora)
-log_info "Wykryta wersja Fedory: $FEDORA_VER"
+log_info "Wykryta wersja Fedory: $FEDORA_VER" \
+         "Detected Fedora version: $FEDORA_VER"
 
 wait_for_rpm_lock
 sudo dnf5 install -y \
     "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-${FEDORA_VER}.noarch.rpm" \
     "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${FEDORA_VER}.noarch.rpm" \
-    || log_warn "Część repozytoriów RPM Fusion już zainstalowana lub niedostępna"
+    || log_warn "Część repozytoriów RPM Fusion już zainstalowana lub niedostępna" \
+                "Some RPM Fusion repositories are already installed or unavailable"
 
 # --- Chrome ---
-log_info "Konfiguracja repozytorium i instalacja Google Chrome..."
+log_info "Konfiguracja repozytorium i instalacja Google Chrome..." \
+         "Configuring repository and installing Google Chrome..."
 
-# UWAGA: samo dodanie repo z gpgcheck=1 i poleganie na tym, że dnf5 sam
-# zaimportuje klucz przy instalacji, potrafi się wysypać, jeśli w bazie RPM
-# jest już zaimportowany STARY klucz Google (np. z poprzedniego uruchomienia
-# skryptu) - RPM/dnf5 widzi ten sam Key ID i nie podmienia go automatycznie,
-# mimo że Google okresowo rotuje podklucze podpisujące. Efekt: błąd
-# weryfikacji podpisu przy `dnf5 install google-chrome-stable`. Dlatego
-# najpierw ręcznie usuwamy stary klucz Google z bazy RPM i importujemy
-# świeży, zanim dnf5 w ogóle zacznie cokolwiek instalować.
-log_info "Ręczny import klucza Google..."
 OLD_GOOGLE_KEYS=$(rpm -qa 'gpg-pubkey*' --qf '%{NAME}-%{VERSION}-%{RELEASE} %{PACKAGER}\n' 2>/dev/null \
     | grep -i 'linux-packages-keymaster@google.com\|Google, Inc' \
     | cut -d' ' -f1 || true)
 if [[ -n "$OLD_GOOGLE_KEYS" ]]; then
-    log_info "Usuwam stary klucz Google przed ponownym importem: $OLD_GOOGLE_KEYS"
     sudo rpm -e $OLD_GOOGLE_KEYS 2>/dev/null || true
 fi
-sudo rpm --import https://dl.google.com/linux/linux_signing_key.pub || log_warn "Błąd pobierania klucza Google, pomijam."
+sudo rpm --import https://dl.google.com/linux/linux_signing_key.pub || log_warn "Błąd pobierania klucza Google, pomijam." "Error downloading Google key, skipping."
 
 sudo tee /etc/yum.repos.d/google-chrome.repo > /dev/null <<'EOF'
 [google-chrome]
@@ -149,30 +192,20 @@ EOF
 wait_for_rpm_lock
 sudo dnf5 install -y google-chrome-stable
 
-# --- Brave (Origin) - wg https://brave.com/origin/linux/ ---
-log_info "Konfiguracja repozytorium i instalacja Brave Origin..."
+# --- Brave (Origin) ---
+log_info "Konfiguracja repozytorium i instalacja Brave Origin..." \
+         "Configuring repository and installing Brave Origin..."
 wait_for_rpm_lock
 sudo dnf5 install -y dnf-plugins-core gnupg2
 
-# UWAGA: podobnie jak w wersji apt/deb, klucz podpisujący hostowany przez
-# Brave na S3 (brave-core.asc, do którego odwołuje się plik .repo poniżej)
-# bywa nieaktualny względem tego, czym faktycznie podpisują metadane repo —
-# znany, powtarzający się problem po stronie Brave (np.
-# https://github.com/brave/brave-browser/issues/34373 i #42949), objawiający
-# się błędem "Signing key not found" / "repository does not have any OpenPGP
-# keys configured". Dlatego importujemy klucz RĘCZNIE przed dodaniem repo:
-# najpierw próbujemy oficjalnego brave-core.asc, a jeśli import się nie uda,
-# pobieramy ten sam klucz po jego ID bezpośrednio z niezależnego keyservera.
 BRAVE_KEY_ID="0686B78420038257"
 if ! sudo rpm --import https://brave-browser-rpm-release.s3.brave.com/brave-core.asc 2>/dev/null; then
-    log_warn "Import klucza Brave z brave-core.asc nie powiódł się, próbuję keyservera..."
     BRAVE_GNUPGHOME="$(mktemp -d)"
-    if ! gpg --homedir "$BRAVE_GNUPGHOME" --keyserver hkps://keyserver.ubuntu.com --recv-keys "$BRAVE_KEY_ID"; then
-        log_warn "keyserver.ubuntu.com nie odpowiedział, próbuję keys.openpgp.org..."
-        gpg --homedir "$BRAVE_GNUPGHOME" --keyserver hkps://keys.openpgp.org --recv-keys "$BRAVE_KEY_ID"
+    if ! gpg --homedir "$BRAVE_GNUPGHOME" --keyserver hkps://keyserver.ubuntu.com --recv-keys "$BRAVE_KEY_ID" 2>/dev/null; then
+        gpg --homedir "$BRAVE_GNUPGHOME" --keyserver hkps://keys.openpgp.org --recv-keys "$BRAVE_KEY_ID" || true
     fi
-    gpg --homedir "$BRAVE_GNUPGHOME" --armor --export "$BRAVE_KEY_ID" > "$BRAVE_GNUPGHOME/brave-core.asc"
-    sudo rpm --import "$BRAVE_GNUPGHOME/brave-core.asc"
+    gpg --homedir "$BRAVE_GNUPGHOME" --armor --export "$BRAVE_KEY_ID" > "$BRAVE_GNUPGHOME/brave-core.asc" 2>/dev/null || true
+    sudo rpm --import "$BRAVE_GNUPGHOME/brave-core.asc" 2>/dev/null || log_warn "Nie udało się zaimportować klucza GPG dla Brave" "Failed to import Brave GPG key"
     rm -rf "$BRAVE_GNUPGHOME"
 fi
 
@@ -183,42 +216,32 @@ sudo dnf5 install -y brave-origin
 
 # --- Narzędzia deweloperskie ---
 wait_for_rpm_lock
-sudo dnf5 install -y @development-tools @c-development || log_warn "Część grup deweloperskich nie powiodła się"
-sudo dnf5 install -y gcc gcc-c++ make || log_warn "Część narzędzi deweloperskich nie powiodła się"
+sudo dnf5 install -y @development-tools @c-development || log_warn "Część grup deweloperskich nie powiodła się" "Some development groups failed to install"
+sudo dnf5 install -y gcc gcc-c++ make || log_warn "Część narzędzi deweloperskich nie powiodła się" "Some development tools failed to install"
 
 # --- Czyszczenie zbędnych pakietów ---
-log_info "Usuwanie zbędnych pakietów..."
+log_info "Usuwanie zbędnych pakietów..." \
+         "Removing unnecessary packages..."
 TO_REMOVE=(
-    nano konqueror plasma-browser-integration plasma-vault krdp krfb 
-    plasma-thunderbolt kontact kmail kontrast plasma-welcome imagemagick 
-    kaddressbook kdepim-runtime akonadi-server akregator korganizer 
+    nano konqueror plasma-browser-integration plasma-vault krdp krfb
+    plasma-thunderbolt kontact kmail kontrast plasma-welcome imagemagick
+    kaddressbook kdepim-runtime akonadi-server akregator korganizer
     epiphany decibels rhythmbox showtime cosmic-player parole kwalletmanager
 )
 wait_for_rpm_lock
 sudo dnf5 remove -y "${TO_REMOVE[@]}" 2>/dev/null \
-    || log_warn "Część pakietów do usunięcia nie była zainstalowana"
+    || log_warn "Część pakietów do usunięcia nie była zainstalowana" "Some packages to remove were not installed"
 sudo dnf5 autoremove -y
 
-# --- Czyszczenie danych po Akonadi/KMail/Kontact (pozostałości po usuniętych pakietach) ---
-log_info "Usuwanie pozostałych danych Akonadi/KMail/Kontact..."
-rm -rf ~/.local/share/akonadi
-rm -rf ~/.local/share/kmail2
-rm -rf ~/.local/share/local-mail
-rm -rf ~/.local/share/contacts
-rm -rf ~/.local/share/korganizer
-rm -rf ~/.local/share/akregator
-rm -rf ~/.local/share/kontact
-rm -rf ~/.config/akonadi*
-rm -rf ~/.config/kmail*
-rm -rf ~/.config/kontact*
-rm -rf ~/.config/korganizer*
-rm -rf ~/.config/kaddressbook*
-rm -rf ~/.config/akregator*
-rm -rf ~/.config/emailidentities
-rm -rf ~/.config/mailtransports
+# Czyszczenie danych po Akonadi/KMail/Kontact
+rm -rf ~/.local/share/akonadi ~/.local/share/kmail2 ~/.local/share/local-mail
+rm -rf ~/.local/share/contacts ~/.local/share/korganizer ~/.local/share/akregator ~/.local/share/kontact
+rm -rf ~/.config/akonadi* ~/.config/kmail* ~/.config/kontact* ~/.config/korganizer*
+rm -rf ~/.config/kaddressbook* ~/.config/akregator* ~/.config/emailidentities ~/.config/mailtransports
 
-# --- Wyłączenie KDE Wallet (Portfela) ---
-log_info "Wyłączanie usługi KDE Wallet..."
+# Wyłączenie KDE Wallet (Portfela)
+log_info "Wyłączanie usługi KDE Wallet..." \
+         "Disabling KDE Wallet service..."
 mkdir -p ~/.config
 if [[ -f ~/.config/kwalletrc ]]; then
     if grep -q "^\[Wallet\]" ~/.config/kwalletrc; then
@@ -268,33 +291,25 @@ PACKAGES=(
 )
 
 wait_for_rpm_lock
-log_info "Instalacja głównej listy pakietów..."
+log_info "Instalacja głównej listy pakietów..." \
+         "Installing main package list..."
 sudo dnf5 install -y --skip-unavailable "${PACKAGES[@]}" \
-    || log_warn "Część pakietów nie powiodła się — kontynuuję"
+    || log_warn "Część pakietów nie powiodła się — kontynuuję" "Some packages failed — continuing"
 
 
 # ==========================================================
 # 3. WYKRYWANIE GPU: BIBLIOTEKI 32-BIT I DRACUT (EARLY KMS)
 # ==========================================================
-log_info "Wykrywanie GPU: instalacja bibliotek 32-bitowych i konfiguracja dracut..."
+log_info "Wykrywanie GPU oraz konfiguracja bibliotek 32-bit i dracut..." \
+         "Detecting GPU and configuring 32-bit libraries & dracut..."
+
 PACKAGES_32=(
-    # Podstawowe biblioteki systemowe
     glibc.i686 libstdc++.i686 libgcc.i686 vulkan-loader.i686
-
-    # Wine 32-bit
     wine.i686
-
-    # Dźwięk (PipeWire zastępuje PulseAudio, ale libs są dla kompatybilności)
     alsa-lib.i686 pipewire-alsa.i686 pipewire-libs.i686
     pulseaudio-libs.i686 openal-soft.i686
-
-    # Nakładki i wydajność
     mangohud.i686 gamemode.i686
-
-    # Sieć i SSL
     openssl-libs.i686 nss.i686 nspr.i686
-
-    # GTK / Qt (Wine i starsze aplikacje X11/XWayland)
     libXcomposite.i686 libXcursor.i686 libXdamage.i686
     libXext.i686 libXfixes.i686 libXi.i686
     libXrandr.i686 libXrender.i686 libXtst.i686
@@ -305,77 +320,77 @@ GPU_INFO=$(lspci -nn | grep -iE "VGA|3D|Display" || true)
 DRACUT_CONF="/etc/dracut.conf.d/90-gpu.conf"
 
 if echo "$GPU_INFO" | grep -iq "NVIDIA"; then
-    log_info "Wykryto kartę graficzną NVIDIA. Dodaję 32-bitowe biblioteki własnościowe i moduły dracut..."
+    log_info "Wykryto kartę graficzną NVIDIA." "Detected NVIDIA GPU."
     PACKAGES_32+=(xorg-x11-drv-nvidia-libs.i686 xorg-x11-drv-nvidia-cuda-libs.i686)
     echo 'force_drivers+=" nvidia nvidia_modeset nvidia_uvm nvidia_drm "' | sudo tee "$DRACUT_CONF" > /dev/null
 
 elif echo "$GPU_INFO" | grep -iqE "AMD|Radeon"; then
-    log_info "Wykryto kartę graficzną AMD. Dodaję 32-bitowe biblioteki Mesa i moduł dracut amdgpu..."
+    log_info "Wykryto kartę graficzną AMD." "Detected AMD GPU."
     PACKAGES_32+=(mesa-dri-drivers.i686 mesa-vulkan-drivers.i686 mesa-libGL.i686)
     echo 'force_drivers+=" amdgpu "' | sudo tee "$DRACUT_CONF" > /dev/null
 
 elif echo "$GPU_INFO" | grep -iq "Intel"; then
-    log_info "Wykryto kartę graficzną Intel. Dodaję 32-bitowe biblioteki Mesa i moduł dracut i915..."
+    log_info "Wykryto kartę graficzną Intel." "Detected Intel GPU."
     PACKAGES_32+=(mesa-dri-drivers.i686 mesa-vulkan-drivers.i686 mesa-libGL.i686)
     echo 'force_drivers+=" i915 "' | sudo tee "$DRACUT_CONF" > /dev/null
 
 else
-    log_warn "Nie rozpoznano jednoznacznie karty graficznej. Instaluję pakiety Mesa jako domyślne."
+    log_warn "Nie rozpoznano jednoznacznie karty graficznej. Instaluję pakiety Mesa jako domyślne." \
+             "Unrecognized GPU. Installing default Mesa packages."
     PACKAGES_32+=(mesa-dri-drivers.i686 mesa-vulkan-drivers.i686 mesa-libGL.i686)
     sudo rm -f "$DRACUT_CONF"
 fi
 
 wait_for_rpm_lock
 sudo dnf5 install -y --skip-unavailable "${PACKAGES_32[@]}" \
-    || log_warn "Część bibliotek 32-bitowych nie powiodła się — kontynuuję"
+    || log_warn "Część bibliotek 32-bitowych nie powiodła się — kontynuuję" "Some 32-bit libraries failed — continuing"
 
-# Przebudowa initramfs, jeśli utworzono konfigurację dla dracut
+# Przebudowa initramfs dla dracut
 if [[ -f "$DRACUT_CONF" ]]; then
-    log_info "Przebudowa obrazu initramfs (dracut) dla wczesnego KMS..."
+    log_info "Przebudowa obrazu initramfs (dracut) dla wczesnego KMS..." \
+             "Rebuilding initramfs image (dracut) for early KMS..."
     sudo dracut --force
 fi
 
 # --- Pakiety RPM (Discord, ls-fg, Faugus) ---
-log_info "Pobieranie i instalacja pakietów RPM..."
+log_info "Pobieranie i instalacja pakietów RPM..." \
+         "Downloading and installing RPM packages..."
 mkdir -p "$RPM_DIR"
 
 download_rpm() {
     local name="$1" url="$2" dldest="$3"
     if wget -q --timeout=30 -O "$dldest" "$url"; then
-        log_ok "Pobrano: $name"
+        log_ok "Pobrano: $name" "Downloaded: $name"
     else
-        log_warn "Nie udało się pobrać: $name ($url) — pomijam"
+        log_warn "Nie udało się pobrać: $name ($url) — pomijam" "Failed to download: $name ($url) — skipping"
         rm -f "$dldest"
     fi
 }
 
 # Discord
-log_info "Instalacja Discord..."
 wait_for_rpm_lock
 if sudo dnf5 repolist 2>/dev/null | grep -iq "rpmfusion-nonfree"; then
     if sudo dnf5 install -y discord; then
-        log_ok "Discord zainstalowany przez dnf5."
+        log_ok "Discord zainstalowany przez dnf5." "Discord installed via dnf5."
     else
-        log_err "Błąd podczas instalacji Discorda przez dnf5."
+        log_warn "Błąd podczas instalacji Discorda przez dnf5." "Error installing Discord via dnf5."
     fi
 else
-    log_warn "Repozytorium RPM Fusion Nonfree nie jest włączone. Próbuję pobrać RPM ręcznie..."
+    log_warn "Repozytorium RPM Fusion Nonfree nie jest włączone. Próbuję pobrać RPM ręcznie..." \
+             "RPM Fusion Nonfree is not enabled. Attempting manual RPM download..."
     dest="/tmp/discord.rpm"
-    if wget -q --user-agent="Mozilla/5.0" \
-        "https://discord.com/api/download?platform=linux&format=rpm" -O "$dest"; then
+    if wget -q --user-agent="Mozilla/5.0" "https://discord.com/api/download?platform=linux&format=rpm" -O "$dest"; then
         if file "$dest" | grep -q "RPM"; then
             sudo dnf5 install -y "$dest"
             rm -f "$dest"
         else
-            log_err "Pobrany plik nie jest poprawną paczką RPM. Discord blokuje automatyczne pobieranie."
+            log_warn "Pobrany plik nie jest poprawną paczką RPM." "Downloaded file is not a valid RPM package."
             rm -f "$dest"
         fi
-    else
-        log_err "Nie udało się połączyć z serwerem Discord."
     fi
 fi
 
-# ls-fg i ls-fg-vk (przez GitHub)
+# ls-fg i ls-fg-vk
 LSFG_URL=$(curl -sf https://api.github.com/repos/YuriSizov/ls-fg/releases/latest \
     | grep "browser_download_url.*ls-fg_.*rpm" | cut -d '"' -f 4 || true)
 [[ -n "$LSFG_URL" ]] && download_rpm "ls-fg" "$LSFG_URL" "$RPM_DIR/lsfg.rpm"
@@ -384,13 +399,12 @@ LSFG_VK_URL=$(curl -sf https://api.github.com/repos/YuriSizov/ls-fg-vk/releases/
     | grep "browser_download_url.*rpm" | cut -d '"' -f 4 || true)
 [[ -n "$LSFG_VK_URL" ]] && download_rpm "ls-fg-vk" "$LSFG_VK_URL" "$RPM_DIR/lsfg-vk.rpm"
 
-# Faugus Launcher przez COPR
-log_info "Instalacja Faugus Launcher przez COPR..."
+# Faugus Launcher
 wait_for_rpm_lock
 sudo dnf5 -y copr enable faugus/faugus-launcher \
     && sudo dnf5 --refresh -y install faugus-launcher \
-    && log_ok "Faugus Launcher zainstalowany" \
-    || log_warn "Instalacja Faugus Launcher nie powiodła się (ignoruję)"
+    && log_ok "Faugus Launcher zainstalowany" "Faugus Launcher installed" \
+    || log_warn "Instalacja Faugus Launcher nie powiodła się" "Faugus Launcher installation failed"
 
 # Instaluj pobrane pliki RPM
 shopt -s nullglob
@@ -399,20 +413,20 @@ if [[ ${#RPM_FILES[@]} -gt 0 ]]; then
     wait_for_rpm_lock
     sudo dnf5 install -y "${RPM_FILES[@]}"
 else
-    log_warn "Brak pobranych pakietów RPM do zainstalowania."
+    log_warn "Brak pobranych pakietów RPM do zainstalowania." "No downloaded RPM packages to install."
 fi
 shopt -u nullglob
 rm -rf "$RPM_DIR"
 
 # --- Wirtualizacja ---
-log_info "Konfiguracja wirtualizacji..."
+log_info "Konfiguracja wirtualizacji..." \
+         "Configuring virtualization..."
 wait_for_rpm_lock
 sudo dnf5 install -y --skip-unavailable \
     virt-manager qemu-kvm qemu-img libvirt libvirt-daemon-kvm \
     edk2-ovmf dnsmasq \
-    || log_warn "Część pakietów wirtualizacji nie powiodła się — kontynuuję"
+    || log_warn "Część pakietów wirtualizacji nie powiodła się — kontynuuję" "Some virtualization packages failed — continuing"
 
-# libvirt — Fedora używa virtqemud (modular daemon) — uruchamiamy PRZED firewalld, żeby virbr0 już istniał
 LIBVIRT_SVC=""
 for svc in libvirtd virtqemud; do
     if systemctl list-unit-files "$svc.service" &>/dev/null 2>&1 \
@@ -424,86 +438,70 @@ done
 
 if [[ -n "$LIBVIRT_SVC" ]]; then
     sudo systemctl enable --now "$LIBVIRT_SVC.service"
-    log_ok "Uruchomiono serwis: $LIBVIRT_SVC"
-else
-    log_warn "Nie znaleziono serwisu libvirt (libvirtd/virtqemud) — pomijam"
 fi
 
-# Upewnij się, że sieć "default" (NAT dla maszyn wirtualnych) istnieje i wystartuje przy boocie
 if ! sudo virsh net-info default &>/dev/null; then
-    log_warn "Sieć 'default' nie jest zdefiniowana - definiuję z domyślnego XML..."
     sudo virsh net-define /usr/share/libvirt/networks/default.xml || true
 fi
 sudo virsh net-start default 2>/dev/null || true
-sudo virsh net-autostart default || log_warn "Nie udało się ustawić autostartu sieci 'default' - sprawdź 'virsh net-list --all'."
+sudo virsh net-autostart default || log_warn "Nie udało się ustawić autostartu sieci 'default'." "Failed to enable autostart for network 'default'."
 
-# --- Firewalld ---
+# Firewalld
 if command -v firewall-cmd &>/dev/null; then
-    log_info "Konfiguracja firewalld..."
     sudo systemctl enable --now firewalld
     sudo firewall-cmd --permanent --zone=libvirt --add-interface=virbr0 2>/dev/null || true
     sudo firewall-cmd --permanent --add-source=192.168.122.0/24
     sudo firewall-cmd --reload
-    log_ok "firewalld skonfigurowany"
 fi
 
 # Dodanie użytkownika do grup wirtualizacji
 for grp in libvirt kvm; do
     if getent group "$grp" &>/dev/null; then
-        sudo usermod -aG "$grp" "$CURRENT_USER" \
-            && log_ok "Dodano $CURRENT_USER do grupy $grp"
+        sudo usermod -aG "$grp" "$CURRENT_USER"
     fi
 done
-sudo usermod -aG libvirt $USER && log_ok "Dodano $USER do grupy libvirt"
+
 
 # ==========================================================
 # 3b. FLATPAK / FLATHUB
 # ==========================================================
-log_info "Konfiguracja Flatpak i repozytorium Flathub..."
 wait_for_rpm_lock
-sudo dnf5 install -y flatpak || log_warn "Błąd instalacji Flatpak"
+sudo dnf5 install -y flatpak || log_warn "Błąd instalacji Flatpak" "Error installing Flatpak"
 
 if ! flatpak remote-list | grep -q "^flathub"; then
     sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 fi
 
-log_info "Odświeżanie metadanych Flathub..."
 sudo flatpak update --appstream || true
 
-log_info "Instalacja Flatseal z Flathub..."
-sudo flatpak install -y flathub com.github.tchx84.Flatseal || log_warn "Błąd instalacji Flatseal"
+sudo flatpak install -y flathub com.github.tchx84.Flatseal || log_warn "Błąd instalacji Flatseal" "Error installing Flatseal"
+sudo flatpak install -y flathub it.mijorus.gearlever || log_warn "Błąd instalacji Gear Lever" "Error installing Gear Lever"
 
-log_info "Instalacja Gear Lever z Flathub..."
-sudo flatpak install -y flathub it.mijorus.gearlever || log_warn "Błąd instalacji Gear Lever"
 
 # ==========================================================
 # 4. FINALIZACJA I OPTYMALIZACJA
 # ==========================================================
-log_info "Finalizacja i optymalizacja..."
+log_info "Finalizacja i optymalizacja..." \
+         "Finalization and optimization..."
 
-# Odmaskowanie usług, by system mógł znów z nich korzystać po naszym restarcie
+# Odmaskowanie usług
 sudo systemctl unmask packagekit.service dnf-makecache.timer dnf-makecache.service dnf5-makecache.timer dnf5-makecache.service 2>/dev/null || true
 
-# --- BleachBit ---
+# BleachBit
 if [[ -d "$SCRIPT_DIR/bleachbit" ]]; then
     sudo mkdir -p /root/.config/bleachbit
     sudo cp -af "$SCRIPT_DIR/bleachbit/." /root/.config/bleachbit/
-    log_ok "Skopiowano konfigurację BleachBit"
-else
-    log_warn "Folder $SCRIPT_DIR/bleachbit nie istnieje — pomijam"
 fi
 
-# --- Optymalizacja systemu ---
+# Optymalizacja systemu
 sudo systemctl enable fstrim.timer || true
 sudo journalctl --vacuum-time=2d || true
 
-# Ustaw GRUB_TIMEOUT=0 (idempotentne)
+# Ustaw GRUB_TIMEOUT=0
 sudo sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' /etc/default/grub
-
-# Regeneruj konfigurację GRUB (Od Fedory 34 uniwersalna ścieżka to /boot/grub2/grub.cfg)
 sudo grub2-mkconfig -o /boot/grub2/grub.cfg 2>/dev/null || true
 
-# --- DNS przez NetworkManager ---
+# DNS przez NetworkManager
 ACTIVE_CONN=$(nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null \
     | grep -v "^lo" | head -n 1 | cut -d: -f1 || true)
 if [[ -n "$ACTIVE_CONN" ]]; then
@@ -511,29 +509,24 @@ if [[ -n "$ACTIVE_CONN" ]]; then
         ipv4.dns "1.1.1.1,1.0.0.1" \
         ipv6.dns "2606:4700:4700::1112,2606:4700:4700::1002"
     sudo nmcli connection up "$ACTIVE_CONN" || true
-else
-    log_warn "Brak aktywnego połączenia NetworkManager — pominięto konfigurację DNS"
 fi
 
-# --- ZSH + Oh My Zsh + Powerlevel10k ---
-log_info "Konfiguracja ZSH..."
+# ZSH + Oh My Zsh + Powerlevel10k
+log_info "Konfiguracja ZSH..." \
+         "Configuring ZSH..."
 
 ZSH_BIN=$(command -v zsh || true)
-if [[ -z "$ZSH_BIN" ]]; then
-    log_err "zsh nie jest zainstalowany — nie można ustawić jako domyślna powłoka"
-else
-    sudo chsh -s "$ZSH_BIN" "$CURRENT_USER" \
-        && log_ok "Ustawiono zsh ($ZSH_BIN) jako domyślną powłokę" \
-        || log_warn "Nie udało się ustawić zsh jako domyślnej powłoki"
+if [[ -n "$ZSH_BIN" ]]; then
+    sudo chsh -s "$ZSH_BIN" "$CURRENT_USER" || true
 
     if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
         sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" \
-            "" --unattended
+            "" --unattended || true
     fi
 
     P10K_DIR="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k"
     if [[ ! -d "$P10K_DIR" ]]; then
-        git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$P10K_DIR"
+        git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$P10K_DIR" || true
     fi
 
     ZSHRC="$HOME/.zshrc"
@@ -547,9 +540,10 @@ else
     fi
 fi
 
-# ── Sprzątanie wyjątków ───────────────────────────────────────
+# Usuwanie wyjątku sudo
 sudo rm -f /etc/sudoers.d/99-temp-installer
 
-log_ok "KONFIGURACJA ZAKOŃCZONA SUKCESEM!"
+log_ok "KONFIGURACJA ZAKOŃCZONA SUKCESEM!" \
+       "CONFIGURATION COMPLETED SUCCESSFULLY!"
 sleep 3
 systemctl reboot

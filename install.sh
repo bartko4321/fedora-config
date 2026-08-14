@@ -434,7 +434,7 @@ echo -en "${INFO}==> ${RESTART_PROMPT}${NC}" >&3
 read -r RESTART_CHOICE < /dev/tty
 case "$RESTART_CHOICE" in
     [Yy]*)
-        sudo reboot
+        systemctl reboot
         ;;
     *)
         exit 0

@@ -8,7 +8,7 @@ set -euo pipefail
 detect_system_lang() {
     local sys_lang="${LANG:-}"
     [[ -z "$sys_lang" ]] && sys_lang="${LC_ALL:-${LC_MESSAGES:-}}"
-    if [[ "$sys_lang" == pl_PL* || "$sys_lang" == pl* ]]; then
+    if [[ "$sys_lang" == pl* ]]; then
         echo "pl"
     else
         echo "en"
@@ -110,7 +110,17 @@ if [[ "$EUID" -eq 0 ]]; then
 fi
 
 sudo -v
-echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-temp-installer > /dev/null
+SUDOERS_TMP="$(mktemp)"
+echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" > "$SUDOERS_TMP"
+chmod 0440 "$SUDOERS_TMP"
+if sudo visudo -cf "$SUDOERS_TMP" &>/dev/null; then
+    sudo install -m 0440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/99-temp-installer
+else
+    rm -f "$SUDOERS_TMP"
+    echo -e "${ERROR}✖ Nieprawidłowa składnia pliku sudoers – przerywam.${NC}" >&3
+    exit 1
+fi
+rm -f "$SUDOERS_TMP"
 
 wait_for_rpm_lock() {
     local i=0
@@ -225,8 +235,12 @@ rm -rf ~/.config/kaddressbook* ~/.config/akregator* ~/.config/emailidentities ~/
 mkdir -p ~/.config
 if [[ -f ~/.config/kwalletrc ]]; then
     if grep -q "^\[Wallet\]" ~/.config/kwalletrc; then
+        # Wyciągamy TYLKO sekcję [Wallet], żeby sprawdzić czy zawiera własną linię Enabled=
+        WALLET_SECTION="$(awk '/^\[Wallet\]/{f=1;next} /^\[/{f=0} f' ~/.config/kwalletrc)"
         sed -i '/^\[Wallet\]/,/^\[/{s/^Enabled=.*/Enabled=false/}' ~/.config/kwalletrc
-        grep -q "^Enabled=" ~/.config/kwalletrc || sed -i '/^\[Wallet\]/a Enabled=false' ~/.config/kwalletrc
+        if ! echo "$WALLET_SECTION" | grep -q "^Enabled="; then
+            sed -i '/^\[Wallet\]/a Enabled=false' ~/.config/kwalletrc
+        fi
     else
         printf '[Wallet]\nEnabled=false\n' >> ~/.config/kwalletrc
     fi
@@ -415,7 +429,8 @@ if command -v zsh &>/dev/null; then
     if [[ -f "$ZSHRC" ]]; then
         sed -i 's|^ZSH_THEME=.*|ZSH_THEME="powerlevel10k/powerlevel10k"|' "$ZSHRC" || true
         sed -i 's/^plugins=(.*/plugins=(git sudo systemd fedora dnf)/' "$ZSHRC" || true
-        grep -q "LC_ALL=pl_PL.UTF-8" "$ZSHRC" || echo "export LC_ALL=pl_PL.UTF-8" >> "$ZSHRC"
+        SHELL_LOCALE="${LANG:-${LC_ALL:-${LC_MESSAGES:-en_US.UTF-8}}}"
+        grep -q "^export LC_ALL=" "$ZSHRC" || echo "export LC_ALL=${SHELL_LOCALE}" >> "$ZSHRC"
         grep -q "^fastfetch"         "$ZSHRC" || echo "fastfetch"                  >> "$ZSHRC"
         grep -q "zsh-syntax-highlighting.zsh" "$ZSHRC" || echo "source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" >> "$ZSHRC"
         grep -q "zsh-autosuggestions.zsh"     "$ZSHRC" || echo "source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh"         >> "$ZSHRC"

@@ -285,18 +285,43 @@ PACKAGES_32=(
 
 GPU_INFO=$(lspci -nn | grep -iE "VGA|3D|Display" || true)
 DRACUT_CONF="/etc/dracut.conf.d/90-gpu.conf"
+MESA_32_PKGS=(mesa-dri-drivers.i686 mesa-vulkan-drivers.i686 mesa-libGL.i686)
 
-if echo "$GPU_INFO" | grep -iq "NVIDIA"; then
+GPU_HAS_NVIDIA=0
+GPU_HAS_AMD=0
+GPU_HAS_INTEL=0
+echo "$GPU_INFO" | grep -iq "NVIDIA" && GPU_HAS_NVIDIA=1
+echo "$GPU_INFO" | grep -iqE "AMD|Radeon" && GPU_HAS_AMD=1
+echo "$GPU_INFO" | grep -iq "Intel" && GPU_HAS_INTEL=1
+
+GPU_VENDOR_COUNT=$(( GPU_HAS_NVIDIA + GPU_HAS_AMD + GPU_HAS_INTEL ))
+FORCE_DRIVERS=""
+
+if (( GPU_VENDOR_COUNT >= 2 )); then
+    log_info "Wykryto hybrydowy układ graficzny (więcej niż jedno GPU)." "Detected a hybrid GPU setup (more than one GPU)."
+fi
+
+if (( GPU_HAS_NVIDIA )); then
     PACKAGES_32+=(xorg-x11-drv-nvidia-libs.i686 xorg-x11-drv-nvidia-cuda-libs.i686)
-    echo 'force_drivers+=" nvidia nvidia_modeset nvidia_uvm nvidia_drm "' | sudo tee "$DRACUT_CONF" > /dev/null
-elif echo "$GPU_INFO" | grep -iqE "AMD|Radeon"; then
-    PACKAGES_32+=(mesa-dri-drivers.i686 mesa-vulkan-drivers.i686 mesa-libGL.i686)
-    echo 'force_drivers+=" amdgpu "' | sudo tee "$DRACUT_CONF" > /dev/null
-elif echo "$GPU_INFO" | grep -iq "Intel"; then
-    PACKAGES_32+=(mesa-dri-drivers.i686 mesa-vulkan-drivers.i686 mesa-libGL.i686)
-    echo 'force_drivers+=" i915 "' | sudo tee "$DRACUT_CONF" > /dev/null
+    FORCE_DRIVERS+=" nvidia nvidia_modeset nvidia_uvm nvidia_drm"
+fi
+if (( GPU_HAS_AMD )); then
+    PACKAGES_32+=("${MESA_32_PKGS[@]}")
+    FORCE_DRIVERS+=" amdgpu"
+fi
+if (( GPU_HAS_INTEL )); then
+    PACKAGES_32+=("${MESA_32_PKGS[@]}")
+    FORCE_DRIVERS+=" i915"
+fi
+
+if (( GPU_VENDOR_COUNT > 0 )); then
+    # usuń ewentualne duplikaty w PACKAGES_32 (np. gdy AMD+Intel oba dodały mesa)
+    readarray -t PACKAGES_32 < <(printf '%s\n' "${PACKAGES_32[@]}" | awk '!seen[$0]++')
+    echo "force_drivers+=\"${FORCE_DRIVERS} \"" | sudo tee "$DRACUT_CONF" > /dev/null
 else
-    PACKAGES_32+=(mesa-dri-drivers.i686 mesa-vulkan-drivers.i686 mesa-libGL.i686)
+    # GPU nieznane/niewykryte -> instalujemy generyczne sterowniki mesa 32-bit
+    # (odpowiednik pakietu "lib32-mesa" z Arch Linuksa w świecie Fedory/dnf)
+    PACKAGES_32+=("${MESA_32_PKGS[@]}")
     sudo rm -f "$DRACUT_CONF"
 fi
 

@@ -18,8 +18,8 @@ SCRIPT_LANG="$(detect_system_lang)"
 
 INFO='\033[0;34m'
 SUCCESS='\033[0;32m'
-ERROR='\033[0;31m'
 WARN='\033[0;33m'
+ERR='\033[0;31m'
 NC='\033[0m'
 
 TMP_LOG="$(mktemp /tmp/fedora-install-log.XXXXXX)"
@@ -27,8 +27,6 @@ LOG_FILE="$HOME/install_error_$(date +%Y%m%d_%H%M%S).log"
 
 exec 3>&1
 exec >>"$TMP_LOG" 2>&1
-
-printf '\033[?7l' >&3
 
 cleanup_on_exit() {
     local exit_code=$?
@@ -49,12 +47,11 @@ trap cleanup_on_exit EXIT
 _pick_msg() { [[ "$SCRIPT_LANG" == "pl" ]] && echo "$1" || echo "$2"; }
 log_info()  { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${INFO}==> $m${NC}"; }
 log_ok()    { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${SUCCESS}✔ $m${NC}"; }
-log_err()   { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${ERROR}✖ ERROR: $m${NC}"; }
+log_err()   { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${ERR}✘ ERROR: $m${NC}"; }
 log_warn()  { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${WARN}⚠ WARN: $m${NC}"; }
 
 trap 'log_err "Błąd w linii $LINENO. Polecenie: $BASH_COMMAND" "Error at line $LINENO. Command: $BASH_COMMAND"' ERR
 
-show_progress() {
     local step=$1
     local total=$2
     local msg=$3
@@ -109,6 +106,7 @@ if [[ "$EUID" -eq 0 ]]; then
     exit 1
 fi
 
+printf '\033[?7h\n' >&3
 sudo -v
 SUDOERS_TMP="$(mktemp)"
 echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" > "$SUDOERS_TMP"
@@ -121,6 +119,8 @@ else
     exit 1
 fi
 rm -f "$SUDOERS_TMP"
+
+printf '\033[?7l' >&3
 
 wait_for_rpm_lock() {
     local i=0
@@ -235,7 +235,6 @@ rm -rf ~/.config/kaddressbook* ~/.config/akregator* ~/.config/emailidentities ~/
 mkdir -p ~/.config
 if [[ -f ~/.config/kwalletrc ]]; then
     if grep -q "^\[Wallet\]" ~/.config/kwalletrc; then
-        # Wyciągamy TYLKO sekcję [Wallet], żeby sprawdzić czy zawiera własną linię Enabled=
         WALLET_SECTION="$(awk '/^\[Wallet\]/{f=1;next} /^\[/{f=0} f' ~/.config/kwalletrc)"
         sed -i '/^\[Wallet\]/,/^\[/{s/^Enabled=.*/Enabled=false/}' ~/.config/kwalletrc
         if ! echo "$WALLET_SECTION" | grep -q "^Enabled="; then
@@ -315,12 +314,9 @@ if (( GPU_HAS_INTEL )); then
 fi
 
 if (( GPU_VENDOR_COUNT > 0 )); then
-    # usuń ewentualne duplikaty w PACKAGES_32 (np. gdy AMD+Intel oba dodały mesa)
     readarray -t PACKAGES_32 < <(printf '%s\n' "${PACKAGES_32[@]}" | awk '!seen[$0]++')
     echo "force_drivers+=\"${FORCE_DRIVERS} \"" | sudo tee "$DRACUT_CONF" > /dev/null
 else
-    # GPU nieznane/niewykryte -> instalujemy generyczne sterowniki mesa 32-bit
-    # (odpowiednik pakietu "lib32-mesa" z Arch Linuksa w świecie Fedory/dnf)
     PACKAGES_32+=("${MESA_32_PKGS[@]}")
     sudo rm -f "$DRACUT_CONF"
 fi

@@ -224,7 +224,7 @@ sudo dnf5 install -y @development-tools @c-development gcc gcc-c++ make || true
 
 TO_REMOVE=(
     nano konqueror plasma-browser-integration plasma-vault krdp krfb
-    plasma-thunderbolt kontact kmail kontrast plasma-welcome imagemagick
+    plasma-thunderbolt kontact kmail kontrast plasma-welcome
     kaddressbook kdepim-runtime akonadi-server akregator korganizer
     epiphany decibels gnome-calendar gnome-clocks gnome-user-docs
     gnome-contacts gnome-maps gnome-weather yelp kwalletmanager

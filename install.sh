@@ -170,7 +170,9 @@ for DNF_CONF in /etc/dnf/dnf.conf /etc/dnf/dnf5.conf; do
 done
 
 wait_for_rpm_lock
-sudo dnf5 install -y wget curl pciutils
+for pkg in wget curl pciutils; do
+    sudo dnf5 install -y "$pkg" || true
+done
 
 show_progress 2 $TOTAL_STEPS "$MSG_PHASE_1"
 
@@ -198,7 +200,9 @@ gpgkey=https://dl.google.com/linux/linux_signing_key.pub
 EOF
 
 wait_for_rpm_lock
-sudo dnf5 install -y dnf-plugins-core gnupg2
+for pkg in dnf-plugins-core gnupg2; do
+    sudo dnf5 install -y "$pkg" || true
+done
 
 BRAVE_KEY_ID="0686B78420038257"
 if ! sudo rpm --import https://brave-browser-rpm-release.s3.brave.com/brave-core.asc 2>/dev/null; then

@@ -226,7 +226,8 @@ TO_REMOVE=(
     nano konqueror plasma-browser-integration plasma-vault krdp krfb
     plasma-thunderbolt kontact kmail kontrast plasma-welcome imagemagick
     kaddressbook kdepim-runtime akonadi-server akregator korganizer
-    epiphany decibels rhythmbox gnome-calendar gnome-clocks gnome-music gnome-user-docs gnome-contacts gnome-maps gnome-weather loupe papers gnome-text-editor yelp showtime cosmic-player parole kwalletmanager
+    epiphany decibels gnome-calendar gnome-clocks gnome-user-docs
+    gnome-contacts gnome-maps gnome-weather yelp kwalletmanager
 )
 wait_for_rpm_lock
 for pkg in "${TO_REMOVE[@]}"; do
@@ -265,7 +266,7 @@ PACKAGES=(
     os-prober android-tools fsarchiver inxi pv rsync python3-defusedxml
     python3-packaging python3-pip pipx 7zip zenity innoextract makeself
     bleachbit timeshift cdemu-daemon cdemu-client
-    audacity gimp gmic mixxx kdenlive soundconverter handbrake-gui vlc elisa krita
+    audacity gimp gmic mixxx kdenlive soundconverter handbrake-gui
     telegram-desktop qbittorrent thunderbird
     wine winetricks
     gamemode vulkan-tools gamescope mangohud goverlay

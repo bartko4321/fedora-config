@@ -222,10 +222,12 @@ TO_REMOVE=(
     nano konqueror plasma-browser-integration plasma-vault krdp krfb
     plasma-thunderbolt kontact kmail kontrast plasma-welcome imagemagick
     kaddressbook kdepim-runtime akonadi-server akregator korganizer
-    epiphany decibels rhythmbox showtime cosmic-player parole kwalletmanager
+    epiphany decibels rhythmbox gnome-calendar gnome-clocks gnome-music gnome-user-docs gnome-contacts gnome-maps gnome-weather loupe papers gnome-text-editor yelp showtime cosmic-player parole kwalletmanager
 )
 wait_for_rpm_lock
-sudo dnf5 remove -y "${TO_REMOVE[@]}" 2>/dev/null || true
+for pkg in "${TO_REMOVE[@]}"; do
+    sudo dnf5 remove -y "$pkg" 2>/dev/null || true
+done
 sudo dnf5 autoremove -y || true
 
 rm -rf ~/.local/share/akonadi ~/.local/share/kmail2 ~/.local/share/local-mail

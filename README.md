@@ -48,7 +48,7 @@ Execute the following commands in your terminal:
 
 # 1. Clone your repository
 ```bash
-git clone https://github.com/bartko4321/fedora-config.git
+git clone https://github.com/syscore88/fedora-config.git
 ```
 
 # 2. Enter the downloaded folder
